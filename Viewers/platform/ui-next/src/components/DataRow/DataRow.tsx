@@ -78,6 +78,9 @@ interface DataRowProps {
   title: string;
   onRename: (e) => void;
   //
+  onSelect: (e) => void;
+  onDoubleClick?: (e) => void;
+  //
   onDelete: (e) => void;
   //
   colorHex?: string;
@@ -91,6 +94,7 @@ export const DataRow: React.FC<DataRowProps> = ({
   colorHex,
   details,
   onSelect,
+  onDoubleClick,
   isLocked,
   onToggleVisibility,
   onToggleMeasurement = () => {},
@@ -214,6 +218,7 @@ export const DataRow: React.FC<DataRowProps> = ({
           isSelected ? 'bg-popover' : 'bg-muted'
         } group relative cursor-pointer`}
         onClick={onSelect}
+        onDoubleClick={onDoubleClick}
         data-cy="data-row"
       >
         {/* Hover Overlay */}

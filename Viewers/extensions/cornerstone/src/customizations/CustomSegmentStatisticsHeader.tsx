@@ -34,16 +34,16 @@ export const CustomSegmentStatisticsHeader = ({
   }
   
 
-  // Use useEffect to run bidirectional computation only once
-  useEffect(() => {
-    if (!namedStats.bidirectional && !bidirectionalComputed) {
-      setBidirectionalComputed(true);
-      commandsManager.run('runSegmentBidirectional', {
-        segmentationId,
-        segmentIndex,
-      });
-    }
-  }, [namedStats.bidirectional, bidirectionalComputed, segmentationId, segmentIndex, commandsManager]);
+  // // Use useEffect to run bidirectional computation only once
+  // useEffect(() => {
+  //   if (!namedStats.bidirectional && !bidirectionalComputed) {
+  //     setBidirectionalComputed(true);
+  //     commandsManager.run('runSegmentBidirectional', {
+  //       segmentationId,
+  //       segmentIndex,
+  //     });
+  //   }
+  // }, [namedStats.bidirectional, bidirectionalComputed, segmentationId, segmentIndex, commandsManager]);
 
   if (!namedStats.bidirectional) {
     return (
