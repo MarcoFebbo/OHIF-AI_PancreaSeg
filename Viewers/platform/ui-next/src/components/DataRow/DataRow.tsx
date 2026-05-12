@@ -78,7 +78,6 @@ interface DataRowProps {
   title: string;
   onRename: (e) => void;
   //
-  onSelect: (e) => void;
   onDoubleClick?: (e) => void;
   //
   onDelete: (e) => void;
