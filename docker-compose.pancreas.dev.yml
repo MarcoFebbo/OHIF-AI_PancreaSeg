@@ -5,7 +5,7 @@ services:
       dockerfile: ../Dockerfile.dev
     image: pancrea-seg-ohif-dev:latest
     ports:
-      - "3000:3000"
+      - "3100:3000"
     environment:
       - APP_CONFIG=config/pancreas.js
       - PUBLIC_URL=/
@@ -39,7 +39,7 @@ services:
       - "8000:8000"
     environment:
       - ORTHANC_URL=http://orthanc:8042
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+      - CORS_ORIGINS=http://localhost:3100,http://localhost:8080
       - WATCHFILES_FORCE_POLLING=true
     depends_on:
       - orthanc
@@ -61,7 +61,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "8002:8002"
+      - "8102:8002"
     environment:
       - CUDA_VISIBLE_DEVICES=0,1
       - NVIDIA_VISIBLE_DEVICES=all
@@ -81,8 +81,8 @@ services:
   orthanc:
     image: orthancteam/orthanc:latest
     ports:
-      - "8042:8042"
-      - "4242:4242"
+      - "8142:8042"
+      - "4343:4242"
     volumes:
       - orthanc-data:/var/lib/orthanc/db
     environment:
