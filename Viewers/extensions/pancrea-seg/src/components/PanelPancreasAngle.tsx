@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ContactAngleResult } from '../services/PancreasAngleService';
 import { PancreasAngleServiceEvents } from '../services/PancreasAngleService';
 
@@ -16,7 +16,7 @@ const RISK_LABEL: Record<string, string> = {
 };
 
 interface SegmentOption {
-  /** Composite key: "<segmentationId>::<segmentIndex>" */
+  /** Composite key: "<seriesUID>::<segmentIndex>" */
   key: string;
   segmentationId: string;
   segmentIndex: number;
@@ -33,13 +33,15 @@ interface Props {
 function buildSegmentOptions(
   segmentationService: any,
   viewportGridService: any,
-  displaySetService: any
+  displaySetService: any,
+  seriesUIDOverrides: Record<string, string> = {}
 ): SegmentOption[] {
   const options: SegmentOption[] = [];
   const seen = new Set<string>();
 
   // Resolve the DICOM SeriesInstanceUID for a segmentation display set
   const getSeriesUID = (segId: string): string => {
+    if (seriesUIDOverrides[segId]) return seriesUIDOverrides[segId];
     const ds = displaySetService.getDisplaySetByUID?.(segId);
     return ds?.SeriesInstanceUID ?? segId;
   };
@@ -121,11 +123,25 @@ export function PanelPancreasAngle({ commandsManager, servicesManager }: Props) 
   const [results, setResults] = useState<ContactAngleResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedSeriesUIDMap, setSavedSeriesUIDMap] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  // True if a segmentation has a real DICOM-backed SeriesInstanceUID
+  const isSaved = useCallback(
+    (segmentationId: string): boolean => {
+      if (savedSeriesUIDMap[segmentationId]) return true;
+      const ds = displaySetService.getDisplaySetByUID?.(segmentationId);
+      return !!(ds?.SeriesInstanceUID);
+    },
+    [savedSeriesUIDMap, displaySetService]
+  );
 
   // Sync segment list from SegmentationService — mirrors useViewportSegmentations approach
   useEffect(() => {
     const refreshSegs = () => {
-      setSegmentOptions(buildSegmentOptions(segmentationService, viewportGridService, displaySetService));
+      setSegmentOptions(
+        buildSegmentOptions(segmentationService, viewportGridService, displaySetService, savedSeriesUIDMap)
+      );
     };
 
     refreshSegs();
@@ -144,7 +160,7 @@ export function PanelPancreasAngle({ commandsManager, servicesManager }: Props) 
     ];
 
     return () => subs.forEach(s => s.unsubscribe());
-  }, [segmentationService, viewportGridService]);
+  }, [segmentationService, viewportGridService, savedSeriesUIDMap]);
 
   // Subscribe to PancreasAngleService events
   useEffect(() => {
@@ -176,6 +192,46 @@ export function PanelPancreasAngle({ commandsManager, servicesManager }: Props) 
 
     return () => subs.forEach(s => s.unsubscribe());
   }, [pancreasAngleService]);
+
+  // Unique segmentation IDs that are not yet saved to the server
+  const unsavedSegmentationIds = useMemo(() => {
+    const allIds = [...new Set(segmentOptions.map(o => o.segmentationId))];
+    return allIds.filter(id => !isSaved(id));
+  }, [segmentOptions, isSaved]);
+
+  const hasUnsaved = unsavedSegmentationIds.length > 0;
+
+  // Save all unsaved segmentations, then re-map any selected keys to the new UIDs
+  const handleSaveAll = useCallback(async () => {
+    setSaving(true);
+    const newMap = { ...savedSeriesUIDMap };
+
+    for (const segId of unsavedSegmentationIds) {
+      try {
+        const report = await commandsManager.runCommand('storeSegmentationSilent', { segmentationId: segId });
+        if (report?.SeriesInstanceUID) {
+          newMap[segId] = report.SeriesInstanceUID;
+        }
+      } catch (e) {
+        console.error('[PancreaSeg] Save failed for', segId, e);
+      }
+    }
+
+    // Re-map existing selections so the keys point to the new SeriesUIDs
+    const remapKey = (oldKey: string): string => {
+      const separatorIdx = oldKey.lastIndexOf('::');
+      if (separatorIdx === -1) return oldKey;
+      const oldSegId = oldKey.slice(0, separatorIdx);
+      const idx = oldKey.slice(separatorIdx + 2);
+      return newMap[oldSegId] ? `${newMap[oldSegId]}::${idx}` : oldKey;
+    };
+
+    if (tumorKey) setTumorKey(remapKey(tumorKey));
+    setSelectedVesselKeys(prev => prev.map(remapKey));
+
+    setSavedSeriesUIDMap(newMap);
+    setSaving(false);
+  }, [unsavedSegmentationIds, savedSeriesUIDMap, commandsManager, tumorKey]);
 
   const toggleVessel = useCallback((key: string) => {
     setSelectedVesselKeys(prev =>
@@ -247,6 +303,12 @@ export function PanelPancreasAngle({ commandsManager, servicesManager }: Props) 
   }, [results, commandsManager]);
 
   const vesselOptions = segmentOptions.filter(s => s.key !== tumorKey);
+
+  // A segment option label decorated with an unsaved badge
+  const segLabel = (s: SegmentOption) =>
+    isSaved(s.segmentationId) ? s.label : `${s.label} ⚠ unsaved`;
+
+  // Compute is always allowed — unsaved segments are auto-saved silently by the command.
   const canCompute = tumorKey && selectedVesselKeys.length > 0 && !loading;
 
   return (
@@ -288,7 +350,7 @@ export function PanelPancreasAngle({ commandsManager, servicesManager }: Props) 
           <option value="">Select tumor segment...</option>
           {segmentOptions.map(s => (
             <option key={s.key} value={s.key}>
-              {s.label}
+              {segLabel(s)}
             </option>
           ))}
         </select>
@@ -316,7 +378,7 @@ export function PanelPancreasAngle({ commandsManager, servicesManager }: Props) 
                     checked={selectedVesselKeys.includes(s.key)}
                     onChange={() => toggleVessel(s.key)}
                   />
-                  <span>{s.label}</span>
+                  <span>{segLabel(s)}</span>
                 </label>
               ))}
             </div>
